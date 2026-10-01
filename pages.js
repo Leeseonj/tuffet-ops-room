@@ -4,7 +4,7 @@
   'use strict';
 
   const OPS = 'tuffet-ops';
-  const WF = { release: '빌드·제출', deploy: '서버 배포', sync: '보호 동기화', watch: '매시간 감시', 'constitution-guard': '헌법 감시', 'report-to-issue': '보고 → 이슈', 'agent-pr': '에이전트 PR' };
+  const WF = { release: '빌드·제출', deploy: '서버 배포', sync: '보호 동기화', tick: '정기 점검', 'publish-social': 'SNS 게시', 'refresh-social': 'SNS 토큰 갱신', watch: '감시', 'constitution-guard': '헌법 감시', 'report-to-issue': '보고 → 이슈', 'agent-pr': '에이전트 PR' };
   const EVENT = { schedule: '예약', push: '반영', workflow_dispatch: '수동', issues: '이슈', pull_request: 'PR' };
   const LABEL = { alert: '🚨 알림', constitution: '🛑 헌법·보호', 'daily-report': '매일 보고' };
   const REPO_KO = { 'tuffet-app': '앱', 'tuffet-functions': '서버' };
@@ -176,7 +176,7 @@
     };
     c.put(
       h('h2', {}, '빌드·배포·감시'),
-      h('p', { class: 'lede' }, '출시 전에는 예약 빌드가 쉰다(수동 실행은 됨). 실패하면 🚨 이슈가 따로 열린다.'),
+      h('p', { class: 'lede' }, '정기 점검(tick)이 새 코드가 있을 때만 빌드·배포를 불러낸다. 출시 전에는 3시간마다·빌드 쉼(수동 실행은 됨), 출시 후 매시간. 실패하면 🚨 이슈가 따로 열린다.'),
       h('div', { class: 'cols' }, section('빌드·제출·배포', '(tuffet-guard)', g, 'tuffet-guard'), section('감시·작업자', '(tuffet-ops)', o, OPS)),
     );
   }

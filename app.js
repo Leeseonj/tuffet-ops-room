@@ -7,7 +7,8 @@
   const OWNER = 'Leeseonj';
   const KEY = 'tuffet-ops-room.token';
   const POLL_MS = 2 * 60_000;
-  const STALE_MIN = 90; // watch는 매시간 — 90분 넘게 안 바뀌면 멈춘 것
+  // watch 간격: 출시 전 3시간, 출시 후 매시간(guard tick이 전환) — 간격의 1.5배 넘게 안 바뀌면 멈춘 것
+  const staleMin = (s) => (s.now && s.now.store && s.now.store.live ? 90 : 270);
 
   const $ = (id) => document.getElementById(id);
   const h = (tag, attrs, ...kids) => {
@@ -82,8 +83,8 @@
 
   function renderStatus(s, attn) {
     const n = s.now || {};
-    const stale = minsAgo(s.at) > STALE_MIN;
-    if (stale) attn.push(['warn', `숫자가 ${ago(s.at)} 이후 안 바뀜`, '매시간 감시(watch)가 멈췄다. tuffet-ops Actions의 watch 실행 로그를 본다.', `https://github.com/${OWNER}/tuffet-ops/actions/workflows/watch.yml`]);
+    const stale = minsAgo(s.at) > staleMin(s);
+    if (stale) attn.push(['warn', `숫자가 ${ago(s.at)} 이후 안 바뀜`, '감시(watch)가 멈췄다. tuffet-ops Actions의 watch 실행 로그를 본다.', `https://github.com/${OWNER}/tuffet-ops/actions/workflows/watch.yml`]);
 
     const st = n.store;
     if (!st) setCell('store', '못 읽음', pill('idle', '수집 실패'));
@@ -136,7 +137,7 @@
     const latest = {};
     for (const r of runs) if (!latest[r.name] && r.status === 'completed') latest[r.name] = r;
     for (const [wf, r] of Object.entries(latest)) if (r.conclusion === 'failure') attn.push(['crit', `${WF[wf] || wf} 최근 실행 실패`, `${ago(r.created_at)} · 🚨 이슈가 따로 열렸는지 확인한다.`, r.html_url]);
-    if (runs.length >= 5 && !runs.some((r) => r.event === 'schedule')) attn.push(['warn', `guard 예약 실행 0회 (최근 ${runs.length}회 중)`, 'GitHub이 예약 실행을 아직 켜지 않았다. 계속 0이면 빌드가 자동으로 안 나간다 — release를 수동 실행한다.', `https://github.com/${OWNER}/tuffet-guard/actions/workflows/release.yml`]);
+    if (runs.length >= 5 && !runs.some((r) => r.event === 'schedule')) attn.push(['warn', `guard 예약 실행 0회 (최근 ${runs.length}회 중)`, 'tick 예약이 안 돌고 있다. 계속 0이면 빌드·배포가 자동으로 안 나간다 — tick을 수동 실행한다.', `https://github.com/${OWNER}/tuffet-guard/actions/workflows/tick.yml`]);
   }
 
   function renderIssues(issues, attn) {

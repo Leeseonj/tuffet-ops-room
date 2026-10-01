@@ -154,7 +154,7 @@
   <header>
     <div class="eyebrow">tuffet-ops · 운영실</div>
     <h1>Tuffet 운영실</h1>
-    <p class="lede">코드 변경만 사람이 승인하고, 보고·게시·빌드·심사 제출·배포·감시는 클라우드와 GitHub가 돌립니다. 열 때마다 GitHub에서 최신 상태를 읽고, 열어 둔 동안 2분마다 다시 읽습니다.</p>
+    <p class="lede">코드 변경만 사람이 승인하고, 보고·게시·빌드·심사 제출·배포·감시는 클라우드와 GitHub가 돌립니다. 열 때마다 GitHub에서 최신 상태를 읽고, 열어 둔 동안 2분마다 다시 읽습니다. 숫자는 출시 전 3시간마다, 출시 후 매시간 갱신됩니다.</p>
     <div class="live">
       <span id="fresh" class="pill idle">대기</span>
       <span id="freshText" class="stamp">토큰을 확인하는 중…</span>
@@ -250,10 +250,11 @@
           <tr><td><b>콘텐츠</b></td><td><span class="t">22:07 · 08:07</span></td><td>숲 이미지·릴스 제작, 톤 검사 + Opus 검토 후 게시</td><td>인스타·스레드 게시</td><td>출시 전 게시(코드가 차단)</td></tr>
           <tr><td><b>개발</b></td><td><span class="t">13:07</span></td><td>할 일 하나 → 테스트 통과 시 PR</td><td>없음</td><td>병합·배포</td></tr>
           <tr><td><b>작업자</b></td><td>매시간 최대 1회</td><td>조사·초안·영상 등 키 없는 일</td><td>없음</td><td>하루 6회 초과</td></tr>
-          <tr><td><b>감시</b></td><td><span class="t">매시 17분</span></td><td>숫자 점검, 🚨·🎉 이슈, 작업자 호출, 상태판(이 페이지의 숫자)</td><td>읽기 전용</td><td>판단(AI 없음)</td></tr>
-          <tr><td><b>빌드·제출</b></td><td><span class="t">매시 23분</span></td><td>승인된 앱 → 빌드 → TestFlight → 심사 제출</td><td>Expo · 제출용 키</td><td>승인 안 된 코드</td></tr>
-          <tr><td><b>서버 배포</b></td><td><span class="t">매시 33분</span></td><td>승인된 서버 코드 배포</td><td>배포 계정</td><td>함수 삭제(멈춤)</td></tr>
-          <tr><td><b>보호 동기화</b></td><td><span class="t">매시 47분</span></td><td>헌법·안전장치를 정본으로 되돌림</td><td>감시자 토큰</td><td>—</td></tr>
+          <tr><td><b>감시</b></td><td><span class="t">17분</span> · 출시 전 3시간마다 / 후 매시간</td><td>숫자 점검, 🚨·🎉 이슈, 작업자 호출, 상태판(이 페이지의 숫자)</td><td>읽기 전용</td><td>판단(AI 없음)</td></tr>
+          <tr><td><b>정기 점검(tick)</b></td><td><span class="t">23분</span> · 출시 전 3시간마다 / 후 매시간</td><td>새 앱·서버 코드가 있으면 빌드·배포를 불러냄, 보호 파일 되돌림</td><td>감시자 토큰</td><td>—</td></tr>
+          <tr><td><b>빌드·제출</b></td><td>tick이 부를 때만</td><td>승인된 앱 → 빌드 → TestFlight → 심사 제출</td><td>Expo · 제출용 키</td><td>승인 안 된 코드</td></tr>
+          <tr><td><b>서버 배포</b></td><td>tick이 부를 때만</td><td>승인된 서버 코드 배포</td><td>배포 계정</td><td>함수 삭제(멈춤)</td></tr>
+          <tr><td><b>SNS 게시·토큰 갱신</b></td><td><span class="t">22:52 · 08:52</span> · 매월 1·15일</td><td>콘텐츠 루틴이 올린 글 게시 · 인스타·스레드 토큰 갱신</td><td>게시 토큰</td><td>출시 전 게시</td></tr>
         </tbody>
       </table>
     </div>

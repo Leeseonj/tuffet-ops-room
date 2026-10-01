@@ -46,12 +46,15 @@
 
   // ---------- GitHub ----------
   class GhError extends Error { constructor(status, msg) { super(msg); this.status = status; } }
-  async function gh(path, raw) {
+  // mode: undefined → JSON · 'raw' → 파일 원문 · 'html' → GitHub이 렌더한 마크다운(HTML 텍스트) · 'htmljson' → body_html이 붙은 JSON
+  const ACCEPT = { raw: 'application/vnd.github.raw+json', html: 'application/vnd.github.html+json', htmljson: 'application/vnd.github.html+json' };
+  async function gh(path, mode) {
+    if (mode === true) mode = 'raw';
     let res;
     try {
       res = await fetch('https://api.github.com' + path, {
         cache: 'no-store',
-        headers: { Authorization: `Bearer ${token()}`, Accept: raw ? 'application/vnd.github.raw+json' : 'application/vnd.github+json', 'X-GitHub-Api-Version': '2022-11-28' },
+        headers: { Authorization: `Bearer ${token()}`, Accept: ACCEPT[mode] || 'application/vnd.github+json', 'X-GitHub-Api-Version': '2022-11-28' },
       });
     } catch (e) { throw new GhError(0, '네트워크 연결 실패'); }
     if (!res.ok) {
@@ -60,7 +63,7 @@
       if (res.status === 403 && res.headers.get('x-ratelimit-remaining') === '0') msg = 'GitHub 요청 한도 초과 — 잠시 뒤 자동으로 다시 읽는다';
       throw new GhError(res.status, msg || `HTTP ${res.status}`);
     }
-    return raw ? res.text() : res.json();
+    return mode === 'raw' || mode === 'html' ? res.text() : res.json();
   }
   const token = () => store.get() || memToken;
   const why = (e, repo) => {
@@ -128,7 +131,7 @@
     setList('runs', runs.slice(0, 8).map((r) => {
       const cls = r.status !== 'completed' ? 'warn' : r.conclusion === 'success' ? 'ok' : r.conclusion === 'failure' ? 'crit' : '';
       const state = r.status !== 'completed' ? '진행 중' : r.conclusion === 'success' ? '성공' : r.conclusion === 'failure' ? '실패' : (r.conclusion || r.status);
-      return row(cls, [link(r.html_url, `${WF[r.name] || r.name} · ${state}`), h('span', { class: 'muted' }, ` · ${EVENT[r.event] || r.event}`)], ago(r.created_at));
+      return row(cls, [h('a', { href: '#/runs' }, `${WF[r.name] || r.name} · ${state}`), h('span', { class: 'muted' }, ` · ${EVENT[r.event] || r.event}`)], ago(r.created_at));
     }), '실행 기록 없음');
     const latest = {};
     for (const r of runs) if (!latest[r.name] && r.status === 'completed') latest[r.name] = r;
@@ -140,12 +143,12 @@
     setList('issues', issues.map((i) => {
       const labels = (i.labels || []).map((l) => l.name);
       const cls = labels.includes('alert') ? 'crit' : labels.includes('constitution') ? 'warn' : '';
-      return row(cls, [h('span', { class: 'muted' }, `#${i.number} `), link(i.html_url, i.title)], ago(i.created_at));
+      return row(cls, [h('span', { class: 'muted' }, `#${i.number} `), h('a', { href: `#/issues/${i.number}` }, i.title)], ago(i.created_at));
     }), '열린 이슈 없음');
     const has = (i, l) => (i.labels || []).some((x) => x.name === l);
     const alerts = issues.filter((i) => has(i, 'alert'));
     const cons = issues.filter((i) => has(i, 'constitution'));
-    if (alerts.length) attn.push(['crit', `열린 🚨 알림 이슈 ${alerts.length}개`, alerts.map((i) => `#${i.number}`).join(' '), `https://github.com/${OWNER}/tuffet-ops/issues?q=is%3Aopen+label%3Aalert`]);
+    if (alerts.length) attn.push(['crit', `열린 🚨 알림 이슈 ${alerts.length}개`, alerts.map((i) => `#${i.number}`).join(' '), '#/issues']);
     if (cons.length) attn.push(['idle', `열린 헌법·보호 이슈 ${cons.length}개`, '기록용이면 설명 달고 닫아도 된다.', `https://github.com/${OWNER}/tuffet-ops/issues?q=is%3Aopen+label%3Aconstitution`]);
   }
 
@@ -202,11 +205,11 @@
       else prErr.push(why(r.reason, name));
     }
     setList('prs', [
-      ...prs.map((p) => row(p.draft ? '' : 'warn', [h('span', { class: 'muted' }, `${p.repo} #${p.number} `), link(p.html_url, p.title)], ago(p.created_at))),
+      ...prs.map((p) => row(p.draft ? '' : 'warn', [h('span', { class: 'muted' }, `${p.repo} #${p.number} `), h('a', { href: `#/prs/${p.base.repo.name}/${p.number}` }, p.title)], ago(p.created_at))),
       ...prErr.map((m) => row('', h('span', { class: 'muted' }, m))),
     ], '승인 기다리는 코드 없음');
     const ready = prs.filter((p) => !p.draft);
-    if (ready.length) attn.push(['warn', `코드 승인 대기 PR ${ready.length}개`, '병합 = 승인, 닫으면 거절. 이것만 파운더 몫이다.', ready.length === 1 ? ready[0].html_url : `https://github.com/${OWNER}/tuffet-app/pulls`]);
+    if (ready.length) attn.push(['warn', `코드 승인 대기 PR ${ready.length}개`, '병합 = 승인, 닫으면 거절. 이것만 파운더 몫이다.', ready.length === 1 ? `#/prs/${ready[0].base.repo.name}/${ready[0].number}` : '#/prs']);
     if (prErr.length) attn.push(['warn', 'PR 목록 일부를 못 읽음', prErr.join(' ')]);
 
     renderAttn(attn);
@@ -235,13 +238,32 @@
     $('setup').hidden = true;
     $('forget').hidden = false;
     setFresh('idle', '읽는 중', 'GitHub에서 읽는 중…');
-    load();
+    route();
   });
   $('forget').addEventListener('click', () => { store.clear(); memToken = ''; showSetup(); });
-  $('refresh').addEventListener('click', load);
-  document.addEventListener('visibilitychange', () => { if (!document.hidden) load(); });
-  setInterval(() => { if (!document.hidden) load(); }, POLL_MS);
 
-  if (token()) { $('forget').hidden = false; setFresh('idle', '읽는 중', 'GitHub에서 읽는 중…'); load(); }
-  else showSetup();
+  // ---------- 페이지 이동(#/경로) ----------
+  const current = () => { try { return decodeURIComponent(location.hash.replace(/^#/, '')) || '/'; } catch (e) { return '/'; } };
+  const isHome = () => current() === '/';
+  const ctx = { OWNER, gh, h, ago, kst, pill, link, row, why, authFail: () => { store.clear(); memToken = ''; showSetup('토큰이 거절됐다(만료됐거나 잘못 붙여 넣음). 새로 만들어 넣는다.'); } };
+  function route() {
+    const r = current();
+    for (const a of document.querySelectorAll('#tabs a')) {
+      const t = a.getAttribute('href').slice(1);
+      if (t === '/' ? r === '/' : r === t || r.startsWith(t + '/')) a.setAttribute('aria-current', 'page'); else a.removeAttribute('aria-current');
+    }
+    if (!token()) return showSetup();
+    $('home').hidden = !isHome();
+    $('page').hidden = isHome();
+    if (isHome()) return load();
+    window.scrollTo(0, 0);
+    window.OpsRoomPages.render(r, $('page'), ctx);
+  }
+  window.addEventListener('hashchange', route);
+  $('refresh').addEventListener('click', route);
+  document.addEventListener('visibilitychange', () => { if (!document.hidden && isHome()) load(); });
+  setInterval(() => { if (!document.hidden && isHome()) load(); }, POLL_MS);
+
+  if (token()) { $('forget').hidden = false; setFresh('idle', '읽는 중', 'GitHub에서 읽는 중…'); }
+  route();
 })();

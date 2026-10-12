@@ -109,7 +109,8 @@
   async function prs(args, c) {
     const { h } = c;
     if (args[0] && args[1]) return prOne(args[0], args[1], c);
-    const res = await Promise.allSettled(['tuffet-app', 'tuffet-functions'].map((r) => c.gh(`/repos/${c.OWNER}/${r}/pulls?state=all&per_page=20`)));
+    // 저장소 이름이 비면(플랫폼 none 등) 호출하지 않는다 — /repos/OWNER//pulls 404 방지
+    const res = await Promise.allSettled(['tuffet-app', 'tuffet-functions'].map((r) => (r ? c.gh(`/repos/${c.OWNER}/${r}/pulls?state=all&per_page=20`) : Promise.resolve([]))));
     if (res.some((r) => r.status === 'rejected' && r.reason.status === 401)) return c.authFail();
     const rows = [];
     const errs = [];
@@ -214,10 +215,10 @@
       const pick = [...picked].map(([p, why]) => [why, p]);
       return h('div', {},
         h('p', {}, `7일 — 링크 탭 ${n(d7.linkTaps)}(전주 ${n(p7.linkTaps)}) · 팔로우 순증 ${n(d7.netFollows)}(전주 ${n(p7.netFollows)}) · 공유+저장 ${n(d7.sharesSaves)} · 게시 ${n(d7.posts)}`
-          + (d7.downloads != null || d7.storeClicks != null ? ` · 스토어 이동 ${n(d7.storeClicks)} · 다운로드 ${n(d7.downloads)}` : '')),
+          + (d7.visits != null || d7.storeClicks != null || d7.downloads != null ? ` · 사이트 방문 ${n(d7.visits)} · 스토어 이동 ${n(d7.storeClicks)} · 다운로드 ${n(d7.downloads)}` : '')),
         h('h4', {}, '주제'), ul(c, pillars, '주제 없음'),
         h('h4', {}, '눈여겨볼 게시물'), ul(c, pick.map(([why, p]) => c.row(why.startsWith('하위') ? 'warn' : 'ok', `${why} · ${p.pillar || '수동'} · ${n(p.format)}`, `점수 ${p.pct ?? '보류'}${p.estLinkTaps != null ? ` · 링크 탭(추정) ${p.estLinkTaps}` : ''}`)), '판정된 게시물 없음'),
-        h('p', { class: 'muted' }, `판정 ${n(j.judgedAt)} · 추정(est)은 계정 숫자를 도달 증가분으로 나눈 값`),
+        h('p', { class: 'muted' }, `판정 ${n(j.judgedAt)} · 추정(est)은 계정 숫자를 도달 증가분으로 나눈 값 · 방문·스토어 이동은 행 합(상한, 같은 사람 중복 가능)`),
       );
       } catch (e) { return h('p', { class: 'muted' }, `판정 파일 형식 이상 — ${String(e?.message ?? e)}`); }
     };

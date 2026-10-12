@@ -1,3 +1,4 @@
+// engine-managed
 // 운영실의 홈 밖 페이지들 — 보고서·알림·PR·빌드·콘텐츠·문서. app.js의 라우터가 render(경로, 자리, ctx)로 부른다.
 // 마크다운은 GitHub이 렌더해 준 HTML을 그대로 쓴다(GitHub이 정제하고, index.html의 CSP가 스크립트 실행을 막는다).
 (function () {
@@ -97,7 +98,7 @@
       crumbs(c, [['알림·이슈', '#/issues'], [`#${n}`]]),
       h('div', { class: 'doc' },
         h('div', { class: 'dochead' }, h('h2', {}, i.title), ghLink(c, i.html_url)),
-        h('p', { class: 'meta' }, c.pill(i.state === 'open' ? 'warn' : 'idle', i.state === 'open' ? '열림' : '닫힘'), ` ${c.kst.format(new Date(i.created_at))} KST · ${(i.labels || []).map((l) => LABEL[l.name] || l.name).join(' · ')}`),
+        h('p', { class: 'meta' }, c.pill(i.state === 'open' ? 'warn' : 'idle', i.state === 'open' ? '열림' : '닫힘'), ` ${c.kst.format(new Date(i.created_at))} · ${(i.labels || []).map((l) => LABEL[l.name] || l.name).join(' · ')}`),
         md(c, i.body_html || '<p>(본문 없음)</p>'),
         ...comments.map((cm) => h('div', { class: 'comment' }, h('p', { class: 'meta' }, `${cm.user && cm.user.login} · ${c.ago(cm.created_at)}`), md(c, cm.body_html || ''))),
       ),
@@ -140,7 +141,7 @@
       crumbs(c, [['코드 승인(PR)', '#/prs'], [`${REPO_KO[repo]} #${n}`]]),
       h('div', { class: 'doc' },
         h('div', { class: 'dochead' }, h('h2', {}, p.title), ghLink(c, p.html_url, p.state === 'open' ? 'GitHub에서 승인·거절 ↗' : 'GitHub에서 열기 ↗')),
-        h('p', { class: 'meta' }, st, ` ${c.kst.format(new Date(p.created_at))} KST · ${p.user && p.user.login} · 파일 ${p.changed_files}개 +${p.additions} −${p.deletions}`),
+        h('p', { class: 'meta' }, st, ` ${c.kst.format(new Date(p.created_at))} · ${p.user && p.user.login} · 파일 ${p.changed_files}개 +${p.additions} −${p.deletions}`),
         md(c, p.body_html || '<p>(설명 없음)</p>'),
         h('h3', {}, '바뀐 파일'),
         ul(c, files.map((f) => c.row(f.status === 'added' ? 'ok' : f.status === 'removed' ? 'crit' : '', h('span', { class: 'mono' }, f.filename), `+${f.additions} −${f.deletions}`)), '없음'),
@@ -184,17 +185,46 @@
   // ---------- 콘텐츠 ----------
   async function content(args, c) {
     const { h } = c;
-    const [log, drafts, seo] = await Promise.allSettled([
+    const [log, drafts, seo, judged] = await Promise.allSettled([
       c.gh(`/repos/${c.OWNER}/${OPS}/contents/content/log.md`, 'html'),
       dir(c, OPS, 'content/drafts'),
       dir(c, OPS, 'content/seo-drafts'),
+      c.gh(`/repos/${c.OWNER}/${OPS}/contents/content/judgement.json`, 'raw').then((t) => JSON.parse(t)),
     ]);
-    if ([log, drafts, seo].some((r) => r.status === 'rejected' && r.reason.status === 401)) return c.authFail();
+    if ([log, drafts, seo, judged].some((r) => r.status === 'rejected' && r.reason.status === 401)) return c.authFail();
     const files = (r, empty) => (r.status === 'rejected' ? h('p', { class: 'muted' }, c.why(r.reason, OPS))
       : ul(c, r.value.filter((f) => f.type === 'file').sort((a, b) => sortDesc(a.name, b.name)).map((f) => c.row('', h('a', { href: `#/docs/${f.path}` }, f.name.replace(/\.md$/, '')))), empty));
+    const n = (v) => (v == null ? '없음' : String(v));
+    const STATE = { retired: ['crit', '은퇴'], breeding: ['ok', '번식'], alive: ['', '생존'], untested: ['idle', '시험 중'], low: ['warn', '약함'] };
+    const survival = () => {
+      if (judged.status === 'rejected') return h('p', { class: 'muted' }, judged.reason.status === 404 ? '아직 판정 없음(하루 한 번 수집)' : c.why(judged.reason, OPS));
+      const j = judged.value;
+      if (!j || typeof j !== 'object') return h('p', { class: 'muted' }, '판정 파일 형식 이상 — 객체가 아님');
+      try {
+      const a = j.account || {};
+      if (j.status !== 'ok') return h('p', { class: 'muted' }, `수집 상태: ${j.status} — ${(j.notes || []).join(' ')}`);
+      const d7 = a.d7 || {}, p7 = a.prev7 || {};
+      const pillars = Object.entries(j.pillars || {}).sort((x, y) => (y[1].medianPct ?? -1) - (x[1].medianPct ?? -1))
+        .map(([k, v]) => c.row((STATE[v.state] || [''])[0], `${k} · ${(STATE[v.state] || ['', v.state])[1]}`, `판정 ${n(v.judged)}건 · 중앙 ${n(v.medianPct)}`));
+      const ranked = (j.posts || []).filter((p) => p.pct != null).sort((x, y) => y.pct - x.pct);
+      const picked = new Map();
+      if (ranked[0]) picked.set(ranked[0], '상위');
+      if (ranked.length > 1) picked.set(ranked[ranked.length - 1], '하위');
+      for (const p of (j.posts || []).filter((p) => p.surging)) picked.set(p, picked.has(p) ? `${picked.get(p)} · 뒤늦게 터짐` : '뒤늦게 터짐');
+      const pick = [...picked].map(([p, why]) => [why, p]);
+      return h('div', {},
+        h('p', {}, `7일 — 링크 탭 ${n(d7.linkTaps)}(전주 ${n(p7.linkTaps)}) · 팔로우 순증 ${n(d7.netFollows)}(전주 ${n(p7.netFollows)}) · 공유+저장 ${n(d7.sharesSaves)} · 게시 ${n(d7.posts)}`
+          + (d7.downloads != null || d7.storeClicks != null ? ` · 스토어 이동 ${n(d7.storeClicks)} · 다운로드 ${n(d7.downloads)}` : '')),
+        h('h4', {}, '주제'), ul(c, pillars, '주제 없음'),
+        h('h4', {}, '눈여겨볼 게시물'), ul(c, pick.map(([why, p]) => c.row(why.startsWith('하위') ? 'warn' : 'ok', `${why} · ${p.pillar || '수동'} · ${n(p.format)}`, `점수 ${p.pct ?? '보류'}${p.estLinkTaps != null ? ` · 링크 탭(추정) ${p.estLinkTaps}` : ''}`)), '판정된 게시물 없음'),
+        h('p', { class: 'muted' }, `판정 ${n(j.judgedAt)} · 추정(est)은 계정 숫자를 도달 증가분으로 나눈 값`),
+      );
+      } catch (e) { return h('p', { class: 'muted' }, `판정 파일 형식 이상 — ${String(e?.message ?? e)}`); }
+    };
     c.put(
       h('h2', {}, '콘텐츠'),
-      h('p', { class: 'lede' }, '출시 전이라 게시는 코드가 막고 있고, 초안과 검토 기록만 쌓인다. 출시 후엔 게시물마다 반응(조회·좋아요)도 여기에 붙인다.'),
+      h('p', { class: 'lede' }, '게시물마다 반응을 하루 한 번 모아 코드가 판정한다(은퇴·번식·뒤늦게 터짐). 출시 전엔 게시를 코드가 막고 초안과 검토 기록만 쌓인다.'),
+      h('div', { class: 'panel' }, h('h3', {}, '인스타 생존'), survival()),
       h('div', { class: 'cols' },
         h('div', { class: 'panel' }, h('h3', {}, '인스타·스레드 초안'), files(drafts, '초안 없음')),
         h('div', { class: 'panel' }, h('h3', {}, '검색 유입용 글(SEO) 초안'), files(seo, '초안 없음')),

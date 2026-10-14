@@ -1,4 +1,4 @@
-// Tuffet 운영실 — 공개 페이지라 데이터는 하나도 담지 않는다.
+// engine-managed — Tuffet 운영실. 공개 페이지라 데이터는 하나도 담지 않는다.
 // 파운더가 이 기기에 넣은 읽기 전용 GitHub 토큰으로 비공개 저장소를 직접 읽는다(index.html의 CSP가 api.github.com 외 연결을 막는다).
 // 숫자(출시·매출·오류 등) = tuffet-ops `status` 브랜치의 status.json(매시 17분 watch가 씀). 이슈·PR·빌드 = 여는 순간의 GitHub 값.
 (function () {
@@ -103,7 +103,7 @@
     } else setCell('usage', '못 읽음', pill('idle', '수집 실패'));
     if (n.serverErrors == null) setCell('err', '못 읽음', pill('idle', '수집 실패'));
     else setCell('err', `${n.serverErrors}건`, pill(n.serverErrors >= 5 ? 'crit' : n.serverErrors > 0 ? 'warn' : 'ok', n.serverErrors >= 5 ? '급증' : n.serverErrors > 0 ? '조금 있음' : '조용함'));
-    if (n.pushTokens == null) setCell('push', '못 읽음', pill('idle', '수집 실패'));
+    if (n.pushTokens == null) setCell('push', '—', pill('idle', '수집 안 함'));
     else setCell('push', `${n.pushTokens}대`, pill(n.pushTokens > 0 ? 'ok' : 'warn', n.pushTokens > 0 ? '받는 중' : '0대'));
     for (const a of n.alerts || []) attn.push(['crit', a.title, '이번 시간 감시가 잡은 이상 신호. 같은 제목의 🚨 이슈에 자세한 내용이 있다.', `https://github.com/${OWNER}/tuffet-ops/issues?q=is%3Aopen+label%3Aalert`]);
     const bad = (n.sources || []).filter((x) => x.status === 'error').map((x) => x.source);
@@ -115,7 +115,7 @@
       row(ag.report ? 'ok' : '', ['매일 보고 ', h('span', { class: 'muted' }, '09:07 · '), ag.report ? link(`https://github.com/${OWNER}/tuffet-ops/blob/main/reports/${encodeURIComponent(ag.report)}`, ag.report) : '아직 없음']),
       row(ag.content ? 'ok' : '', ['콘텐츠 ', h('span', { class: 'muted' }, '22:07·08:07 · '), ag.content ? ag.content.replace(/^\|\s*/, '').split('|').map((x) => x.trim()).filter(Boolean).slice(0, 3).join(' · ') : '아직 없음 (출시 전 게시 잠김)']),
       row(ag.dev && ag.dev.open ? 'warn' : '', ['개발 ', h('span', { class: 'muted' }, '13:07 · '), `대기 ${ag.dev?.open ?? '—'} · 처리됨 ${ag.dev?.other ?? '—'}`]),
-      row(w.todayCalls >= w.cap ? 'warn' : 'ok', ['작업자 ', h('span', { class: 'muted' }, '매시간 · '), `오늘 호출 ${w.todayCalls ?? '—'}/${w.cap ?? 6}`]),
+      row(w.todayCalls >= w.cap ? 'warn' : 'ok', ['작업자 ', h('span', { class: 'muted' }, '감시 때 · '), `오늘 호출 ${w.todayCalls ?? '—'}/${w.cap ?? 6}`]),
     ], '');
     $('worker-count').textContent = `대기 ${w.open ?? '—'} · 끝남 ${w.other ?? '—'}`;
     setList('queue', (w.queue || []).map((q) => {
@@ -172,8 +172,8 @@
       gh(`/repos/${OWNER}/tuffet-ops/contents/status.json?ref=status`, true).then((t) => JSON.parse(t)),
       gh(`/repos/${OWNER}/tuffet-guard/actions/runs?per_page=15`).then((d) => d.workflow_runs || []),
       gh(`/repos/${OWNER}/tuffet-ops/issues?state=open&per_page=30`).then((d) => d.filter((i) => !i.pull_request)),
-      gh(`/repos/${OWNER}/tuffet-app/pulls?state=open&per_page=30`),
-      gh(`/repos/${OWNER}/tuffet-functions/pulls?state=open&per_page=30`),
+      // 저장소 이름이 비면(플랫폼 none 등) 호출하지 않는다 — /repos/OWNER//pulls 404 방지
+      ...['tuffet-app', 'tuffet-functions'].map((r) => (r ? gh(`/repos/${OWNER}/${r}/pulls?state=open&per_page=30`) : Promise.resolve([]))),
     ]);
     busy = false;
     $('refresh').disabled = false;
@@ -217,7 +217,7 @@
     const failed = results.filter((r) => r.status === 'rejected').length;
     const at = status.status === 'fulfilled' ? status.value.at : null;
     setFresh(failed || stale ? 'warn' : 'ok', failed ? '일부 못 읽음' : stale ? '숫자 멈춤' : '최신',
-      `${at ? `숫자 ${kst.format(new Date(at))} KST (${ago(at)}) · ` : ''}이슈·PR·빌드 ${kst.format(new Date())} 기준 · 2분마다 다시 읽음`);
+      `${at ? `숫자 ${kst.format(new Date(at))} (${ago(at)}) · ` : ''}이슈·PR·빌드 ${kst.format(new Date())} 기준 · 2분마다 다시 읽음`);
   }
 
   // ---------- 설정 화면 ----------

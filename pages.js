@@ -186,15 +186,17 @@
   // ---------- 콘텐츠 ----------
   async function content(args, c) {
     const { h } = c;
-    const [log, drafts, seo, judged, heard, seen] = await Promise.allSettled([
+    const [log, drafts, seo, judged, heard, seen, tj, ideas] = await Promise.allSettled([
       c.gh(`/repos/${c.OWNER}/${OPS}/contents/content/log.md`, 'html'),
       dir(c, OPS, 'content/drafts'),
       dir(c, OPS, 'content/seo-drafts'),
       c.gh(`/repos/${c.OWNER}/${OPS}/contents/content/judgement.json`, 'raw').then((t) => JSON.parse(t)),
       c.gh(`/repos/${c.OWNER}/${OPS}/contents/content/listening/threads.json`, 'raw').then((t) => JSON.parse(t)),
       c.gh(`/repos/${c.OWNER}/${OPS}/contents/content/listening/instagram.json`, 'raw').then((t) => JSON.parse(t)),
+      c.gh(`/repos/${c.OWNER}/${OPS}/contents/content/listening/threads-judgement.json`, 'raw').then((t) => JSON.parse(t)),
+      c.gh(`/repos/${c.OWNER}/${OPS}/contents/content/listening/threads-ideas.json`, 'raw').then((t) => JSON.parse(t)),
     ]);
-    if ([log, drafts, seo, judged, heard, seen].some((r) => r.status === 'rejected' && r.reason.status === 401)) return c.authFail();
+    if ([log, drafts, seo, judged, heard, seen, tj, ideas].some((r) => r.status === 'rejected' && r.reason.status === 401)) return c.authFail();
     const files = (r, empty) => (r.status === 'rejected' ? h('p', { class: 'muted' }, c.why(r.reason, OPS))
       : ul(c, r.value.filter((f) => f.type === 'file').sort((a, b) => sortDesc(a.name, b.name)).map((f) => c.row('', h('a', { href: `#/docs/${f.path}` }, f.name.replace(/\.md$/, '')))), empty));
     const n = (v) => (v == null ? '없음' : String(v));
@@ -245,7 +247,33 @@
         );
       } catch (e) { return h('p', { class: 'muted' }, `수집 파일 형식 이상 — ${String(e?.message ?? e)}`); }
     };
+    // 스레드 다음 글 추천(매일 보고 루틴이 씀) · 우리 글 순위(guard 판정) — 파일이 없으면 그 부분을 안 그린다
+    const pctText = (r) => (r == null ? '없음' : `${Math.round(r * 1000) / 10}%`);
+    const sideFile = (r, draw) => {
+      if (r.status === 'rejected') return r.reason.status === 404 ? null : h('p', { class: 'muted' }, c.why(r.reason, OPS));
+      if (!r.value || typeof r.value !== 'object') return h('p', { class: 'muted' }, '파일 형식 이상 — 객체가 아님');
+      try { return draw(r.value); } catch (e) { return h('p', { class: 'muted' }, `파일 형식 이상 — ${String(e?.message ?? e)}`); }
+    };
+    const ideasPart = sideFile(ideas, (t) => h('div', {},
+      h('h4', {}, `다음 글 추천 · ${n(t.date)}`),
+      ul(c, (t.ideas || []).slice(0, 3).map((x) => c.row('ok', [h('b', {}, x.topic || '(주제 없음)'), ` · ${x.format || '형식 없음'}`, x.hook ? h('small', { class: 'tag' }, x.hook) : null, h('br'), h('span', { class: 'muted' }, `${x.reason || ''}${x.brandNote ? ` · ${x.brandNote}` : ''}`)],
+        (x.basis || []).map((b) => `조회 ${n(b.views)}`).join(' · '))), '추천 없음'),
+      ...((t.formats || []).length ? [h('h4', {}, '잘 된 형식'), ul(c, t.formats.map((f) => c.row('', f.name, `중앙 조회 ${n(f.medianViews)} · 글 ${(f.examples || []).length}개`)), '')] : []),
+      ...((t.comments || []).length ? [h('h4', {}, '댓글에서 자주 나온 것'), ul(c, t.comments.slice(0, 5).map((m) => c.row('', m.theme, `${n(m.count)}개`)), '')] : []),
+    ));
+    const rankPart = sideFile(tj, (j) => {
+      if (j.status !== 'ok') return h('p', { class: 'muted' }, `스레드 판정 상태: ${j.status} — ${(j.notes || []).join(' ')}`);
+      const byId = new Map((j.posts || []).map((p) => [p.id, p]));
+      const line = (why, cls) => (id) => { const p = byId.get(id); return p ? c.row(cls, `${why} · ${p.textHead || '(글 없음)'}`, `조회 ${n(p.views)} · 반응률 ${pctText(p.rate)}`) : null; };
+      const surging = (j.posts || []).filter((p) => p.surging).map((p) => p.id);
+      const seenIds = new Set(); // 급상승이 상위·하위에도 있으면 한 번만(급상승 라벨 우선)
+      const once = (ids, why, cls) => ids.filter((id) => !seenIds.has(id) && seenIds.add(id)).map(line(why, cls));
+      return h('div', {}, h('h4', {}, '우리 글 순위(본글 + 우리 답글)'),
+        ul(c, [...once(surging, '급상승', 'ok'), ...once(j.top || [], '상위', 'ok'), ...once(j.bottom || [], '하위', 'warn')].filter(Boolean), '판정된 글 없음'),
+        h('p', { class: 'muted' }, `판정 ${n(j.judgedAt)} · 급상승 = 어제보다 조회 +50% 이상이고 +300 이상`));
+    });
     const heardPanel = listening();
+    const threadsParts = [ideasPart, rankPart, heardPanel].filter(Boolean);
     // 인스타 읽기(social.listen instagram) — 해시태그 인기 글 · 비교 계정 · 우리를 태그한 글. 파일이 없으면 패널 없음
     const SEC = { ok: '', no_permission: '권한 없음(심사 전)', skipped: '대상 없음' };
     const byLikes = (xs) => [...(xs || [])].sort((a, b) => (b.likes ?? -1) - (a.likes ?? -1));
@@ -270,7 +298,7 @@
       h('h2', {}, '콘텐츠'),
       h('p', { class: 'lede' }, '게시물마다 반응을 하루 한 번 모아 코드가 판정한다(은퇴·번식·뒤늦게 터짐). 출시 전엔 게시를 코드가 막고 초안과 검토 기록만 쌓인다.'),
       h('div', { class: 'panel' }, h('h3', {}, '인스타 생존'), survival()),
-      ...(heardPanel ? [h('div', { class: 'panel' }, h('h3', {}, '스레드 화제'), heardPanel)] : []),
+      ...(threadsParts.length ? [h('div', { class: 'panel' }, h('h3', {}, '스레드 화제'), ...threadsParts)] : []),
       ...(igPanel ? [h('div', { class: 'panel' }, h('h3', {}, '인스타 화제'), igPanel)] : []),
       h('div', { class: 'cols' },
         h('div', { class: 'panel' }, h('h3', {}, '인스타·스레드 초안'), files(drafts, '초안 없음')),
